@@ -12,6 +12,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import lombok.Getter;
@@ -25,22 +26,24 @@ public class UserModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String username;
-
+    private String name;
+    private String surname;
     private String email;
-
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
     private Role role; // ADMIN, CA, USER
 
+    //Only for CA
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organization_id", nullable = true)
-    private OrganizationModel organization;
+    private OrganizationModel caOrganization;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
+    //Only for regular users
     @OneToMany(mappedBy = "ownerUser")
     private List<CertificateModel> certificates = new ArrayList<>();
+    private String privateOrganisation;
+    @Lob
+    private byte[] keystorePasswordEncrypted;
+    private boolean isVerified=false;
 }

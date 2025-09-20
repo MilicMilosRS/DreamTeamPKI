@@ -30,8 +30,10 @@ import org.springframework.stereotype.Service;
 
 import rs.tim33.PKI.Models.CertificateModel;
 import rs.tim33.PKI.Models.KeystoreModel;
+import rs.tim33.PKI.Models.UserModel;
 import rs.tim33.PKI.Repositories.CertificateRepository;
 import rs.tim33.PKI.Repositories.KeystoreRepository;
+import rs.tim33.PKI.Repositories.UserRepository;
 import rs.tim33.PKI.Services.KeystoreService;
 
 @Service
@@ -55,14 +57,22 @@ public class CertificateService {
 	private KeystoreService keystoreService;
 	@Autowired
 	private KeystoreRepository keystoreRepo;
+	@Autowired 
+	private UserRepository userRepo;
 	
 	public PrivateKey getPrivateKeyOfCert(Long certificateId) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException, UnrecoverableKeyException {
 		CertificateModel cert = certRepo.findById(certificateId).orElse(null);
 
-		KeyStore ks = keystoreService.getKeystoreFromId(cert.getKeystore().getId());
-		Key key = ks.getKey(cert.getAlias(), "TODO PASSWORD".toCharArray());
-		if (key instanceof PrivateKey) {
-		    return (PrivateKey) key;
+		KeyStore ks;
+		try {
+			ks = keystoreService.getKeystoreFromId(cert.getKeystore().getId());
+			Key key = ks.getKey(cert.getAlias(), "TODO PASSWORD".toCharArray());
+			if (key instanceof PrivateKey) {
+			    return (PrivateKey) key;
+			}
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 		
 		return null;
@@ -124,7 +134,42 @@ public class CertificateService {
         
         //Persist it in the keystore
         keystoreService.addCertificate(newCert.getKeystore().getId(), newCert.getId(), keyPair.getPrivate());
-        System.out.println(cert.toString());
+        
+		return new KeyPairAndCert(keyPair, cert);
+	}
+	
+	public KeyPairAndCert createEndEntity(Long parentCertId, Long endUserId, String certName, int daysValid) throws Exception {
+		CertificateModel parentCert = certRepo.findById(parentCertId).orElse(null);
+		UserModel user = userRepo.findById(endUserId).orElse(null);
+		
+		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+        keyGen.initialize(2048);
+        KeyPair keyPair = keyGen.generateKeyPair();
+		
+		long now = System.currentTimeMillis();
+        Date startDate = new Date(now);
+        Date endDate = new Date(now + daysValid * 24L * 60 * 60 * 1000);
+        
+        X500Name subject = new X500Name("CN="+user.getName() + certName + ", O="+user.getPrivateOrganisation());
+        X500Name issuer = new X500Name(parentCert.getSubjectDn());
+        BigInteger serial = BigInteger.valueOf(now);
+        
+        JcaX509v3CertificateBuilder certBuilder =
+                new JcaX509v3CertificateBuilder(
+                        issuer, serial, startDate, endDate, subject, keyPair.getPublic());
+		
+        certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
+        
+        //Create certificate
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA").build(getPrivateKeyOfCert(parentCertId));
+        X509Certificate cert = new JcaX509CertificateConverter().getCertificate(certBuilder.build(signer));
+        
+        //Persist it in the database
+        CertificateModel newCert = new CertificateModel(cert, parentCert.getKeystore(), parentCert);
+        newCert = certRepo.save(newCert);
+        
+        //Persist it in the keystore
+        keystoreService.addCertificate(newCert.getKeystore().getId(), newCert.getId(), keyPair.getPrivate());
         
 		return new KeyPairAndCert(keyPair, cert);
 	}
