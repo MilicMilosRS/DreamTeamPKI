@@ -63,7 +63,7 @@ public class KeystoreService {
     
     public KeystoreModel saveKeystoreWithId(Long keystoreId, KeyStore keystore) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {
     	KeystoreModel ks = keystoreRepository.findById(keystoreId).orElse(null);
-    	String keystorePassword = new String(ks.getPasswordEncrypted());
+    	String keystorePassword = keyHelper.encodeKey(ks.getPasswordEncrypted());
     	
     	try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
     		keystore.store(baos, keystorePassword.toCharArray());
